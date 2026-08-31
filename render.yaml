@@ -1,9 +1,9 @@
 services:
-  # 1. Forensic API Backend & Database Service
   - type: web
     name: smart-forensic-api
     env: node
     plan: starter
+    healthCheckPath: /api/health
     buildCommand: npm install --include=dev && npm run build --workspace=@smart-forensic/shared && npm run build --workspace=@smart-forensic/security-engine && npm run prisma:generate --workspace=@smart-forensic/api && npm run build --workspace=@smart-forensic/api
     startCommand: node apps/api/dist/server.js
     envVars:
@@ -13,6 +13,10 @@ services:
         value: 10000
       - key: HOST
         value: 0.0.0.0
+      - key: LOCAL_AGENT_MODE
+        value: "false"
+      - key: AGENT_OFFLINE_MS
+        value: "15000"
       - key: JWT_SECRET
         generateValue: true
       - key: LOCAL_AGENT_TOKEN
@@ -22,7 +26,6 @@ services:
           name: smart-forensic-db
           property: connectionString
 
-  # 2. Next.js Web Forensic Dashboard
   - type: web
     name: smart-forensic-web
     env: node
@@ -36,7 +39,7 @@ services:
         fromService:
           type: web
           name: smart-forensic-api
-          property: host
+          envVarKey: RENDER_EXTERNAL_URL
 
 databases:
   - name: smart-forensic-db
