@@ -20,11 +20,12 @@
     "build:security": "npm run build --workspace=@smart-forensic/security-engine",
     "build:api": "npm run build --workspace=@smart-forensic/api",
     "build:web": "npm run build --workspace=@smart-forensic/web",
+    "start": "npm run start --workspace=@smart-forensic/api",
     "test": "npm run test --workspaces --if-present",
-    "start:agent": "npm run start --workspace=apps/api",
-    "start:web": "npm run start --workspace=apps/web",
-    "prisma:generate": "npm run prisma:generate --workspace=apps/api",
-    "prisma:push": "npm run prisma:push --workspace=apps/api"
+    "start:agent": "npm run start --workspace=@smart-forensic/api",
+    "start:web": "npm run start --workspace=@smart-forensic/web",
+    "prisma:generate": "npm run prisma:generate --workspace=@smart-forensic/api",
+    "prisma:push": "npm run prisma:push --workspace=@smart-forensic/api"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",
