@@ -1,0 +1,67 @@
+{
+  "tools": [
+    {
+      "package": "com.topjohnwu.magisk",
+      "name": "Magisk Root Manager",
+      "category": "Root Management Tool",
+      "riskScore": 75,
+      "riskLevel": "HIGH_RISK",
+      "confidence": "HIGH",
+      "description": "Systemless root interface and module manager"
+    },
+    {
+      "package": "eu.chainfire.supersu",
+      "name": "SuperSU",
+      "category": "Root Management Tool",
+      "riskScore": 70,
+      "riskLevel": "HIGH_RISK",
+      "confidence": "HIGH",
+      "description": "Superuser root access management utility"
+    },
+    {
+      "package": "com.termux",
+      "name": "Termux",
+      "category": "Terminal Environment",
+      "riskScore": 25,
+      "riskLevel": "INFORMATIONAL",
+      "confidence": "HIGH",
+      "description": "Linux environment and terminal emulator for Android"
+    },
+    {
+      "package": "app.greyshirts.sslcapture",
+      "name": "Packet Capture",
+      "category": "Network Packet Sniffer",
+      "riskScore": 30,
+      "riskLevel": "INFORMATIONAL",
+      "confidence": "HIGH",
+      "description": "SSL/TLS network traffic capture tool via local VPN"
+    },
+    {
+      "package": "com.emanuelef.remote_capture",
+      "name": "PCAPdroid",
+      "category": "Network Packet Sniffer",
+      "riskScore": 25,
+      "riskLevel": "INFORMATIONAL",
+      "confidence": "HIGH",
+      "description": "Open-source network monitor and traffic capture tool"
+    },
+    {
+      "package": "org.sandrop.sandromirror",
+      "name": "SandroProxy",
+      "category": "Web Proxy / MitM Tool",
+      "riskScore": 40,
+      "riskLevel": "INFORMATIONAL",
+      "confidence": "HIGH",
+      "description": "Web traffic interception and debugging proxy"
+    },
+    {
+      "package": "com.metasploit.stage",
+      "name": "Metasploit Meterpreter Payload",
+      "category": "Penetration Testing / Remote Administration Tool",
+      "riskScore": 95,
+      "riskLevel": "CRITICAL",
+      "confidence": "HIGH",
+      "description": "Exploit framework payload with remote command capability"
+    }
+  ]
+}

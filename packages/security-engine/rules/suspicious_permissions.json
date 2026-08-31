@@ -1,0 +1,74 @@
+{
+  "permissionRules": [
+    {
+      "permission": "android.permission.BIND_ACCESSIBILITY_SERVICE",
+      "riskScore": 30,
+      "category": "CONTROL",
+      "flag": "ACCESSIBILITY_SERVICE_CAPABILITY",
+      "reason": "Requests full UI interaction & screen inspection (Accessibility Service)"
+    },
+    {
+      "permission": "android.permission.SYSTEM_ALERT_WINDOW",
+      "riskScore": 20,
+      "category": "OVERLAY",
+      "flag": "OVERLAY_CAPABILITY",
+      "reason": "Requests drawing over other applications (Screen Overlay)"
+    },
+    {
+      "permission": "android.permission.BIND_DEVICE_ADMIN",
+      "riskScore": 25,
+      "category": "PERSISTENCE",
+      "flag": "DEVICE_ADMIN_CAPABILITY",
+      "reason": "Requests Android Device Administrator privilege"
+    },
+    {
+      "permission": "android.permission.REQUEST_INSTALL_PACKAGES",
+      "riskScore": 20,
+      "category": "DROPPER",
+      "flag": "APK_INSTALL_CAPABILITY",
+      "reason": "Capable of prompting or initiating package installations"
+    },
+    {
+      "permission": "android.permission.READ_SMS",
+      "riskScore": 15,
+      "category": "PRIVACY",
+      "flag": "SMS_READ_ACCESS",
+      "reason": "Requests access to read private SMS text messages"
+    },
+    {
+      "permission": "android.permission.RECEIVE_SMS",
+      "riskScore": 15,
+      "category": "PRIVACY",
+      "flag": "SMS_RECEIVE_ACCESS",
+      "reason": "Requests access to intercept incoming SMS text messages"
+    },
+    {
+      "permission": "android.permission.READ_CONTACTS",
+      "riskScore": 10,
+      "category": "PRIVACY",
+      "flag": "CONTACTS_ACCESS",
+      "reason": "Requests access to read the user address book"
+    },
+    {
+      "permission": "android.permission.RECORD_AUDIO",
+      "riskScore": 15,
+      "category": "SURVEILLANCE",
+      "flag": "MICROPHONE_ACCESS",
+      "reason": "Requests permission to record audio via microphone"
+    },
+    {
+      "permission": "android.permission.CAMERA",
+      "riskScore": 12,
+      "category": "SURVEILLANCE",
+      "flag": "CAMERA_ACCESS",
+      "reason": "Requests permission to capture camera pictures/video"
+    },
+    {
+      "permission": "android.permission.ACCESS_BACKGROUND_LOCATION",
+      "riskScore": 15,
+      "category": "TRACKING",
+      "flag": "BACKGROUND_LOCATION_ACCESS",
+      "reason": "Requests continuous background GPS tracking"
+    }
+  ]
+}

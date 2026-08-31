@@ -1,0 +1,36 @@
+{
+  "name": "smart-forensic-system",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Smart Android Forensic & Security Analysis System",
+  "workspaces": [
+    "packages/*",
+    "apps/api",
+    "apps/web"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:api\" \"npm run dev:web\"",
+    "dev:api": "npm run dev --workspace=apps/api",
+    "dev:web": "npm run dev --workspace=apps/web",
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "start:agent": "npm run start --workspace=apps/api",
+    "start:web": "npm run start --workspace=apps/web",
+    "prisma:generate": "npm run prisma:generate --workspace=apps/api",
+    "prisma:push": "npm run prisma:push --workspace=apps/api"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "typescript": "^5.4.5"
+  },
+  "keywords": [
+    "android",
+    "forensics",
+    "adb",
+    "security-analysis",
+    "malware-heuristics",
+    "incident-response"
+  ],
+  "author": "Antigravity Forensic Team",
+  "license": "Apache-2.0"
+}

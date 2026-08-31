@@ -1,0 +1,197 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         String   @default("ADMIN") // ADMIN, INVESTIGATOR, AUDITOR
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  cases        Case[]
+}
+
+model Device {
+  id                 String   @id @default(cuid())
+  serial             String   @unique
+  maskedSerial       String
+  manufacturer       String
+  model              String
+  marketName         String
+  androidVersion     String
+  apiLevel           Int
+  securityPatchLevel String
+  isDemo             Boolean  @default(false)
+  lastSeenAt         DateTime @default(now())
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  cases              Case[]
+  scans              Scan[]
+}
+
+model Case {
+  id               String    @id @default(cuid())
+  caseNumber       String    @unique
+  title            String
+  description      String
+  investigatorId   String?
+  investigatorName String
+  deviceSerial     String
+  deviceModel      String
+  status           String    @default("OPEN") // OPEN, IN_PROGRESS, CLOSED, ARCHIVED
+  riskLevel        String    @default("UNKNOWN") // SAFE, INFORMATIONAL, SUSPICIOUS, HIGH_RISK, CRITICAL
+  notes            String    @default("")
+  tags             String    @default("") // Comma separated
+  closedAt         DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  investigator User?    @relation(fields: [investigatorId], references: [id])
+  device       Device   @relation(fields: [deviceSerial], references: [serial])
+  scans        Scan[]
+  auditLogs    AuditLog[]
+}
+
+model Scan {
+  id           String    @id @default(cuid())
+  caseId       String
+  deviceSerial String
+  status       String    @default("IN_PROGRESS") // IN_PROGRESS, COMPLETED, FAILED
+  progress     Int       @default(0)
+  currentStage String    @default("INITIALIZE")
+  riskScore    Int       @default(0)
+  riskLevel    String    @default("UNKNOWN")
+  summaryJson  String    @default("{}") // ForensicScanSummary JSON
+  startedAt    DateTime  @default(now())
+  completedAt  DateTime?
+
+  case             Case                   @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  device           Device                 @relation(fields: [deviceSerial], references: [serial])
+  applications     AppScanRecord[]
+  contacts         ContactRecord[]
+  smsMessages      SmsRecord[]
+  processes        ProcessRecord[]
+  securityFindings SecurityFindingRecord[]
+  auditLogs        AuditLog[]
+}
+
+model AppScanRecord {
+  id                 String   @id @default(cuid())
+  scanId             String
+  packageName        String
+  appName            String
+  versionName        String
+  versionCode        Int
+  apkPath            String
+  installSource      String
+  isSystemApp        Boolean
+  isSideloaded       Boolean
+  isDebuggable       Boolean
+  sha256             String?
+  riskScore          Int
+  riskLevel          String
+  confidence         String   @default("LOW")
+  flagsJson          String   @default("[]")
+  reasonsJson        String   @default("[]")
+  sensitivePermsJson String   @default("[]")
+  isSecurityTool     Boolean  @default(false)
+  toolCategory       String?
+  createdAt          DateTime @default(now())
+
+  scan Scan @relation(fields: [scanId], references: [id], onDelete: Cascade)
+}
+
+model ContactRecord {
+  id               String   @id @default(cuid())
+  scanId           String
+  externalId       String?
+  name             String
+  phoneNumbersJson String   @default("[]")
+  emailsJson       String   @default("[]")
+  organization     String?
+  source           String   @default("Device")
+  isDuplicate      Boolean  @default(false)
+  createdAt        DateTime @default(now())
+
+  scan Scan @relation(fields: [scanId], references: [id], onDelete: Cascade)
+}
+
+model SmsRecord {
+  id                   String   @id @default(cuid())
+  scanId               String
+  externalId           String?
+  address              String
+  date                 String
+  type                 String   @default("INBOX")
+  body                 String
+  isSuspicious         Boolean  @default(false)
+  suspiciousReasonsJson String  @default("[]")
+  riskScore            Int      @default(0)
+  createdAt            DateTime @default(now())
+
+  scan Scan @relation(fields: [scanId], references: [id], onDelete: Cascade)
+}
+
+model ProcessRecord {
+  id               String   @id @default(cuid())
+  scanId           String
+  pid              Int
+  user             String
+  processName      String
+  packageName      String?
+  cpuPercent       Float
+  memoryKb         Int
+  status           String   @default("Running")
+  isSuspicious     Boolean  @default(false)
+  suspiciousReason String?
+  createdAt        DateTime @default(now())
+
+  scan Scan @relation(fields: [scanId], references: [id], onDelete: Cascade)
+}
+
+model SecurityFindingRecord {
+  id             String   @id @default(cuid())
+  scanId         String
+  category       String
+  title          String
+  description    String
+  severity       String
+  evidenceJson   String   @default("[]")
+  confidence     String   @default("LOW")
+  affectedItem   String
+  recommendation String
+  createdAt      DateTime @default(now())
+
+  scan Scan @relation(fields: [scanId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id                 String   @id @default(cuid())
+  timestamp          DateTime @default(now())
+  investigator       String
+  action             String
+  resource           String?
+  targetDeviceSerial String?
+  caseId             String?
+  scanId             String?
+  status             String   @default("SUCCESS") // SUCCESS, WARNING, FAILURE
+  details            String
+  ipAddress          String?
+
+  case Case? @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  scan Scan? @relation(fields: [scanId], references: [id], onDelete: SetNull)
+}
+
+model SystemSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+}

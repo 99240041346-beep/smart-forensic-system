@@ -1,0 +1,56 @@
+name: Smart Forensic System CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Monorepo Dependencies
+        run: npm install
+
+      - name: Build Core Packages
+        run: |
+          npm run build --workspace=@smart-forensic/shared
+          npm run build --workspace=@smart-forensic/security-engine
+          npm run build --workspace=@smart-forensic/database
+          npm run build --workspace=@smart-forensic/adb-client
+          npm run build --workspace=@smart-forensic/forensic-plugins
+
+      - name: Run Prisma Generate & DB Sync
+        run: |
+          cd apps/api
+          npx prisma generate
+          npx prisma db push --skip-generate
+        env:
+          DATABASE_URL: "file:./ci.db"
+
+      - name: Run Automated Security Engine Tests
+        run: |
+          cd apps/api
+          npx tsx src/test-runner.ts
+        env:
+          DATABASE_URL: "file:./ci.db"
+
+      - name: Build Local Forensic Agent
+        run: npm run build --workspace=@smart-forensic/local-agent
+
+      - name: Build API Backend
+        run: npm run build --workspace=@smart-forensic/api
+
+      - name: Build Next.js Web Dashboard
+        run: npm run build --workspace=@smart-forensic/web
