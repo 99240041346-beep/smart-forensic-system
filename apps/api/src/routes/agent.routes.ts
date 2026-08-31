@@ -3,8 +3,8 @@ import crypto from 'crypto';
 
 export const agentRouter = Router();
 
-type AgentState = { agentId: string; hostname?: string; lastSeen: number; status?: any; devices?: any[]; refreshedAt?: string };
-type Command = { id: string; type: 'ADB_STATUS' | 'ADB_REFRESH'; createdAt: number; result?: any; error?: string };
+type AgentState = { agentId: string; hostname?: string; lastSeen: number; status?: any; devices?: any[]; refreshedAt?: string; forensicSnapshot?: any };
+type Command = { id: string; type: 'ADB_STATUS' | 'ADB_REFRESH' | 'ADB_FORENSIC_SNAPSHOT'; createdAt: number; result?: any; error?: string };
 
 const agents = new Map<string, AgentState>();
 const commands = new Map<string, Command[]>();
@@ -25,7 +25,8 @@ agentRouter.use((req, res, next) => {
 
 agentRouter.post('/register', (req, res) => {
   const agentId = String(req.body?.agentId || 'default');
-  agents.set(agentId, { agentId, hostname: req.body?.hostname, lastSeen: Date.now(), status: agents.get(agentId)?.status, devices: agents.get(agentId)?.devices });
+  const old = agents.get(agentId);
+  agents.set(agentId, { agentId, hostname: req.body?.hostname, lastSeen: Date.now(), status: old?.status, devices: old?.devices, refreshedAt: old?.refreshedAt, forensicSnapshot: old?.forensicSnapshot });
   return res.json({ ok: true, agentId, serverTime: new Date().toISOString() });
 });
 
@@ -34,20 +35,20 @@ agentRouter.get('/status', (req, res) => {
   const agent = agents.get(agentId);
   if (!agent) return res.json({ connected: false, agentId });
   const connected = Date.now() - agent.lastSeen < Number(process.env.AGENT_OFFLINE_MS || 10000);
-  return res.json({ connected, agentId, lastSeen: new Date(agent.lastSeen).toISOString(), status: agent.status, devices: agent.devices || [] });
+  return res.json({ connected, agentId, lastSeen: new Date(agent.lastSeen).toISOString(), status: agent.status, devices: agent.devices || [], refreshedAt: agent.refreshedAt });
 });
 
 agentRouter.post('/commands', (req, res) => {
   const agentId = String(req.body?.agentId || 'default');
   const agent = agents.get(agentId);
-  if (!agent || Date.now() - agent.lastSeen >= Number(process.env.AGENT_OFFLINE_MS || 10000)) {
-    return res.status(409).json({ error: 'Local forensic agent is offline' });
-  }
-  const command: Command = { id: crypto.randomUUID(), type: req.body?.type === 'ADB_STATUS' ? 'ADB_STATUS' : 'ADB_REFRESH', createdAt: Date.now() };
+  if (!agent || Date.now() - agent.lastSeen >= Number(process.env.AGENT_OFFLINE_MS || 10000)) return res.status(409).json({ error: 'Local forensic agent is offline' });
+  const requestedType = req.body?.type;
+  const type: Command['type'] = requestedType === 'ADB_STATUS' ? 'ADB_STATUS' : requestedType === 'ADB_FORENSIC_SNAPSHOT' ? 'ADB_FORENSIC_SNAPSHOT' : 'ADB_REFRESH';
+  const command: Command = { id: crypto.randomUUID(), type, createdAt: Date.now() };
   const queue = commands.get(agentId) || [];
   queue.push(command);
   commands.set(agentId, queue);
-  return res.status(202).json({ queued: true, commandId: command.id });
+  return res.status(202).json({ queued: true, commandId: command.id, type });
 });
 
 agentRouter.get('/commands', (req, res) => {
@@ -66,9 +67,11 @@ agentRouter.post('/commands/:id/result', (req, res) => {
   agent.lastSeen = Date.now();
   if (req.body?.error) agent.status = { error: req.body.error };
   else {
-    agent.status = req.body.result?.status;
-    agent.devices = req.body.result?.devices || [];
-    agent.refreshedAt = req.body.result?.refreshedAt;
+    const result = req.body.result || {};
+    agent.status = result.status || agent.status;
+    agent.devices = result.devices || agent.devices || [];
+    agent.refreshedAt = result.refreshedAt || agent.refreshedAt;
+    if (result.capturedAt && result.deviceDetails) agent.forensicSnapshot = result;
   }
   return res.json({ ok: true });
 });
@@ -76,10 +79,10 @@ agentRouter.post('/commands/:id/result', (req, res) => {
 export function getDefaultAgentSnapshot() {
   const agent = Array.from(agents.values())[0];
   if (!agent) return { connected: false, devices: [] };
-  return { connected: Date.now() - agent.lastSeen < Number(process.env.AGENT_OFFLINE_MS || 10000), agentId: agent.agentId, lastSeen: new Date(agent.lastSeen).toISOString(), status: agent.status, devices: agent.devices || [], refreshedAt: agent.refreshedAt };
+  return { connected: Date.now() - agent.lastSeen < Number(process.env.AGENT_OFFLINE_MS || 10000), agentId: agent.agentId, lastSeen: new Date(agent.lastSeen).toISOString(), status: agent.status, devices: agent.devices || [], refreshedAt: agent.refreshedAt, forensicSnapshot: agent.forensicSnapshot };
 }
 
-export function queueDefaultAgentCommand(type: 'ADB_STATUS' | 'ADB_REFRESH') {
+export function queueDefaultAgentCommand(type: Command['type']) {
   const agent = Array.from(agents.values())[0];
   if (!agent || Date.now() - agent.lastSeen >= Number(process.env.AGENT_OFFLINE_MS || 10000)) return null;
   const command: Command = { id: crypto.randomUUID(), type, createdAt: Date.now() };
