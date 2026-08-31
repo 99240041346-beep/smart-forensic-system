@@ -3,108 +3,61 @@ import { AdbManager } from '../adb/AdbManager';
 import { AuditLogger } from '../audit/AuditLogger';
 import { DemoDataGenerator } from '../demo/DemoDataGenerator';
 import { prisma } from '../db/client';
+import { getDefaultAgentSnapshot, queueDefaultAgentCommand } from './agent.routes';
 
 export const adbRouter = Router();
 const adbManager = new AdbManager();
+const isLocalAgent = process.env.LOCAL_AGENT_MODE === 'true';
 
 adbRouter.get('/status', async (req: Request, res: Response) => {
   try {
-    const status = await adbManager.checkAdbInstalled();
-    return res.json(status);
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
-  }
+    if (!isLocalAgent) {
+      const snapshot = getDefaultAgentSnapshot();
+      return res.json(snapshot.connected ? { ...snapshot.status, agentConnected: true, deviceCount: snapshot.devices.length, devices: snapshot.devices } : { isInstalled: false, serverRunning: false, deviceCount: 0, devices: [], agentConnected: false, message: 'Local forensic agent is offline. Start the agent on the investigator PC.' });
+    }
+    return res.json(await adbManager.checkAdbInstalled());
+  } catch (err: any) { return res.status(500).json({ error: err.message }); }
 });
 
 adbRouter.get('/devices', async (req: Request, res: Response) => {
   try {
+    if (!isLocalAgent) {
+      const snapshot = getDefaultAgentSnapshot();
+      return res.json({ devices: snapshot.devices || [], count: snapshot.devices?.length || 0, realCount: snapshot.devices?.filter((d:any)=>!d.isDemo).length || 0, demoCount: 0, agentConnected: snapshot.connected });
+    }
     const realDevices = await adbManager.getDevices();
     const demoDevices = DemoDataGenerator.getDemoDevices();
-
-    // Check if demo mode setting is enabled
-    const demoSetting = await prisma.systemSetting.findUnique({
-      where: { key: 'DEMO_MODE' }
-    });
-    const demoEnabled = demoSetting ? demoSetting.value === 'true' : true; // Default true if no physical device
-
-    let allDevices = [...realDevices];
-    if (demoEnabled || realDevices.length === 0) {
-      allDevices = [...realDevices, ...demoDevices];
-    }
-
-    return res.json({
-      devices: allDevices,
-      count: allDevices.length,
-      realCount: realDevices.length,
-      demoCount: demoEnabled ? demoDevices.length : 0
-    });
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
-  }
+    const demoSetting = await prisma.systemSetting.findUnique({ where: { key: 'DEMO_MODE' } });
+    const demoEnabled = demoSetting ? demoSetting.value === 'true' : true;
+    const allDevices = (demoEnabled || realDevices.length === 0) ? [...realDevices, ...demoDevices] : realDevices;
+    return res.json({ devices: allDevices, count: allDevices.length, realCount: realDevices.length, demoCount: demoEnabled ? demoDevices.length : 0 });
+  } catch (err: any) { return res.status(500).json({ error: err.message }); }
 });
 
 adbRouter.post('/refresh', async (req: Request, res: Response) => {
   try {
+    if (!isLocalAgent) {
+      const before = getDefaultAgentSnapshot().refreshedAt;
+      const commandId = queueDefaultAgentCommand('ADB_REFRESH');
+      if (!commandId) return res.status(503).json({ error: 'Local forensic agent is offline. Start the agent on the investigator PC and try again.' });
+      const deadline = Date.now() + 9000;
+      while (Date.now() < deadline) {
+        await new Promise(resolve => setTimeout(resolve, 250));
+        const snapshot = getDefaultAgentSnapshot();
+        if (snapshot.refreshedAt && snapshot.refreshedAt !== before) return res.json({ status: snapshot.status, devices: snapshot.devices || [], refreshedAt: snapshot.refreshedAt, agentConnected: snapshot.connected });
+      }
+      return res.status(504).json({ error: 'Local agent did not return the ADB refresh result in time', commandId });
+    }
     const status = await adbManager.checkAdbInstalled();
     const realDevices = await adbManager.getDevices();
     const demoDevices = DemoDataGenerator.getDemoDevices();
-
-    const demoSetting = await prisma.systemSetting.findUnique({
-      where: { key: 'DEMO_MODE' }
-    });
+    const demoSetting = await prisma.systemSetting.findUnique({ where: { key: 'DEMO_MODE' } });
     const demoEnabled = demoSetting ? demoSetting.value === 'true' : true;
-
-    const allDevices = (demoEnabled || realDevices.length === 0)
-      ? [...realDevices, ...demoDevices]
-      : realDevices;
-
-    // Sync devices to database
+    const allDevices = (demoEnabled || realDevices.length === 0) ? [...realDevices, ...demoDevices] : realDevices;
     for (const dev of allDevices) {
-      await prisma.device.upsert({
-        where: { serial: dev.serial },
-        update: {
-          maskedSerial: dev.maskedSerial,
-          model: dev.model,
-          marketName: dev.model,
-          isDemo: dev.isDemo || false,
-          lastSeenAt: new Date()
-        },
-        create: {
-          serial: dev.serial,
-          maskedSerial: dev.maskedSerial,
-          manufacturer: dev.isDemo ? (dev.serial.includes('S24') ? 'Samsung' : 'Google') : 'Android',
-          model: dev.model,
-          marketName: dev.model,
-          androidVersion: dev.isDemo ? (dev.serial.includes('S24') ? '14' : '15') : '14',
-          apiLevel: dev.isDemo ? (dev.serial.includes('S24') ? 34 : 35) : 34,
-          securityPatchLevel: '2024-08-05',
-          isDemo: dev.isDemo || false,
-          lastSeenAt: new Date()
-        }
-      });
+      await prisma.device.upsert({ where: { serial: dev.serial }, update: { maskedSerial: dev.maskedSerial, model: dev.model, marketName: dev.model, isDemo: dev.isDemo || false, lastSeenAt: new Date() }, create: { serial: dev.serial, maskedSerial: dev.maskedSerial, manufacturer: dev.isDemo ? (dev.serial.includes('S24') ? 'Samsung' : 'Google') : 'Android', model: dev.model, marketName: dev.model, androidVersion: dev.isDemo ? (dev.serial.includes('S24') ? '14' : '15') : '14', apiLevel: dev.isDemo ? (dev.serial.includes('S24') ? 34 : 35) : 34, securityPatchLevel: '2024-08-05', isDemo: dev.isDemo || false, lastSeenAt: new Date() } });
     }
-
-    await AuditLogger.log({
-      investigator: 'Lead Forensics Investigator',
-      action: 'ADB_REFRESH',
-      status: 'SUCCESS',
-      details: `Refreshed ADB status. Discovered ${realDevices.length} physical device(s) and ${allDevices.length} total active target(s).`,
-      ipAddress: req.ip
-    });
-
-    return res.json({
-      status,
-      devices: allDevices,
-      refreshedAt: new Date().toISOString()
-    });
-  } catch (err: any) {
-    await AuditLogger.log({
-      investigator: 'Lead Forensics Investigator',
-      action: 'ADB_REFRESH',
-      status: 'FAILURE',
-      details: `ADB Refresh failed: ${err.message}`,
-      ipAddress: req.ip
-    });
-    return res.status(500).json({ error: err.message });
-  }
+    await AuditLogger.log({ investigator: 'Lead Forensics Investigator', action: 'ADB_REFRESH', status: 'SUCCESS', details: `Refreshed ADB status. Discovered ${realDevices.length} physical device(s) and ${allDevices.length} total active target(s).`, ipAddress: req.ip });
+    return res.json({ status, devices: allDevices, refreshedAt: new Date().toISOString() });
+  } catch (err: any) { return res.status(500).json({ error: err.message }); }
 });
