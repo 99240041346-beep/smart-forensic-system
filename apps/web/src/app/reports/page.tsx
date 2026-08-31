@@ -2,9 +2,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { useDevice } from '../ClientLayout';
-import { api } from '../lib/api';
-import { RiskBadge } from '../components/RiskBadge';
-import { ReportExporter } from '../lib/reportExporter';
+import { api } from '../../lib/api';
+import { RiskBadge } from '../../components/RiskBadge';
+import { ReportExporter } from '../../lib/reportExporter';
 import {
   FileText, Download, Printer, FileJson, Shield
 } from 'lucide-react';
