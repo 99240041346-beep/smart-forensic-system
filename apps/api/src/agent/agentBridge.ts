@@ -18,12 +18,16 @@ async function request(path: string, init: RequestInit = {}) {
 }
 
 async function handleCommand(command: any, adb: AdbManager) {
-  if (command.type === 'ADB_STATUS' || command.type === 'ADB_REFRESH') {
-    const status = await adb.checkAdbInstalled();
-    const devices = await adb.getDevices();
-    return { status, devices, refreshedAt: new Date().toISOString() };
+  switch (command.type) {
+    case 'ADB_STATUS':
+    case 'ADB_REFRESH': {
+      const status = await adb.checkAdbInstalled();
+      const devices = await adb.getDevices();
+      return { status, devices, refreshedAt: new Date().toISOString() };
+    }
+    default:
+      return { error: `Unsupported command: ${command.type}` };
   }
-  return { error: `Unsupported command: ${command.type}` };
 }
 
 export async function startAgentBridge() {
@@ -32,13 +36,21 @@ export async function startAgentBridge() {
     console.warn('[Agent Bridge] PUBLIC_API_URL or LOCAL_AGENT_TOKEN is missing; cloud bridge disabled.');
     return;
   }
+
   running = true;
   const adb = new AdbManager();
   console.log(`[Agent Bridge] Connecting to ${apiUrl} as ${agentId}`);
 
   while (running) {
     try {
-      await request('/api/agent/register', { method: 'POST', body: JSON.stringify({ agentId, hostname: process.env.COMPUTERNAME || 'windows' }) });
+      await request('/api/agent/register', {
+        method: 'POST',
+        body: JSON.stringify({
+          agentId,
+          hostname: process.env.COMPUTERNAME || 'windows'
+        })
+      });
+
       const payload = await request(`/api/agent/commands?agentId=${encodeURIComponent(agentId)}`);
       for (const command of payload?.commands || []) {
         try {
