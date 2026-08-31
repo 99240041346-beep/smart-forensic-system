@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "description": "Smart Android Forensic & Security Analysis System",
-  "workspaces": ["packages/*", "apps/api", "apps/web"],
+  "workspaces": ["packages/*", "apps/api", "apps/web", "agent/local-forensic-agent"],
   "scripts": {
     "dev": "concurrently \"npm run dev:api\" \"npm run dev:web\"",
     "dev:api": "npm run dev --workspace=apps/api",
@@ -16,12 +16,13 @@
     "build:security": "npm run build --workspace=@smart-forensic/security-engine",
     "build:api": "npm run build --workspace=@smart-forensic/api",
     "build:web": "npm run build:shared && npm run build --workspace=@smart-forensic/web",
+    "build:agent": "npm run build --workspace=@smart-forensic/local-agent",
     "start": "npm run start --workspace=@smart-forensic/api",
-    "test": "npm run test --workspaces --if-present",
-    "start:agent": "npm run start --workspace=@smart-forensic/api",
+    "start:agent": "npm run start --workspace=@smart-forensic/local-agent",
     "start:web": "npm run start --workspace=@smart-forensic/web",
     "prisma:generate": "npm run prisma:generate --workspace=@smart-forensic/api",
-    "prisma:push": "npm run prisma:push --workspace=@smart-forensic/api"
+    "prisma:push": "npm run prisma:push --workspace=@smart-forensic/api",
+    "test": "npm run test --workspaces --if-present"
   },
   "devDependencies": {"concurrently": "^8.2.2", "typescript": "^5.4.5"},
   "keywords": ["android", "forensics", "security-analysis", "malware-heuristics", "incident-response"],
