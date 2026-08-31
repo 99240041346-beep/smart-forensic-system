@@ -10,6 +10,21 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: forensic_ci
+          POSTGRES_PASSWORD: forensic_ci
+          POSTGRES_DB: smart_forensics_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U forensic_ci -d smart_forensics_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -37,14 +52,14 @@ jobs:
           npx prisma generate
           npx prisma db push --skip-generate
         env:
-          DATABASE_URL: "file:./ci.db"
+          DATABASE_URL: postgresql://forensic_ci:forensic_ci@localhost:5432/smart_forensics_ci?schema=public
 
       - name: Run Automated Security Engine Tests
         run: |
           cd apps/api
           npx tsx src/test-runner.ts
         env:
-          DATABASE_URL: "file:./ci.db"
+          DATABASE_URL: postgresql://forensic_ci:forensic_ci@localhost:5432/smart_forensics_ci?schema=public
 
       - name: Build Local Forensic Agent
         run: npm run build --workspace=@smart-forensic/local-agent
