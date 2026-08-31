@@ -1,9 +1,118 @@
 import os from 'os';
 import { AdbManager } from './AdbManager';
-type CloudCommand = { id:string; type:'ADB_STATUS'|'ADB_REFRESH'|'ADB_DEVICE_INFO'|'ADB_DEVICE_PROPERTIES'|'ADB_LIST_PACKAGES'|'ADB_STORAGE_SUMMARY'|'ADB_PROCESSES'; serial?:string };
+
+type CloudCommand = {
+  id: string;
+  type: 'ADB_STATUS' | 'ADB_REFRESH' | 'ADB_DEVICE_INFO' | 'ADB_DEVICE_PROPERTIES' | 'ADB_LIST_PACKAGES' | 'ADB_STORAGE_SUMMARY' | 'ADB_PROCESSES';
+  serial?: string;
+};
+
 export class CloudBridge {
-  private running=false; private readonly apiUrl=(process.env.PUBLIC_API_URL||'').replace(/\/$/,''); private readonly token=process.env.LOCAL_AGENT_TOKEN||''; private readonly agentId=process.env.LOCAL_AGENT_ID||`${os.hostname()}-${process.pid}`; private readonly pollMs=Math.max(1000,Number(process.env.AGENT_POLL_MS||2000)); private readonly adb=new AdbManager();
-  public async start(){if(this.running||!this.apiUrl||!this.token){if(!this.apiUrl||!this.token)console.warn('[Cloud Bridge] Set PUBLIC_API_URL and LOCAL_AGENT_TOKEN.');return;}this.running=true;console.log(`[Cloud Bridge] Agent ${this.agentId} -> ${this.apiUrl}`);while(this.running){try{const status=await this.adb.checkAdb(),devices=await this.adb.getDevices();await this.request('/api/agent/register',{method:'POST',body:JSON.stringify({agentId:this.agentId,hostname:os.hostname(),status,devices,heartbeatAt:new Date().toISOString()})});const payload=await this.request(`/api/agent/commands?agentId=${encodeURIComponent(this.agentId)}`) as {commands?:CloudCommand[]};for(const command of payload?.commands||[])await this.handle(command);}catch(error:any){console.warn(`[Cloud Bridge] ${error?.message||error}`);}await new Promise(r=>setTimeout(r,this.pollMs));}}
-  private async handle(command:CloudCommand){try{let result:any;switch(command.type){case'ADB_STATUS':{const status=await this.adb.checkAdb();result={status,devices:await this.adb.getDevices(),refreshedAt:new Date().toISOString()};break;}case'ADB_REFRESH':{const devices=await this.adb.getDevices();result={status:await this.adb.checkAdb(),devices,refreshedAt:new Date().toISOString()};break;}case'ADB_DEVICE_INFO':if(!command.serial)throw new Error('Device serial is required');result={serial:command.serial,deviceInfo:await this.adb.getDeviceInfo(command.serial)};break;case'ADB_DEVICE_PROPERTIES':if(!command.serial)throw new Error('Device serial is required');result={serial:command.serial,properties:await this.adb.getDeviceProperties(command.serial)};break;case'ADB_LIST_PACKAGES':if(!command.serial)throw new Error('Device serial is required');result={serial:command.serial,packages:await this.adb.listPackages(command.serial)};break;case'ADB_STORAGE_SUMMARY':if(!command.serial)throw new Error('Device serial is required');result={serial:command.serial,storage:await this.adb.storageSummary(command.serial)};break;case'ADB_PROCESSES':if(!command.serial)throw new Error('Device serial is required');result={serial:command.serial,processes:await this.adb.listProcesses(command.serial)};break;default:throw new Error(`Unsupported forensic command: ${command.type}`);}await this.request(`/api/agent/commands/${encodeURIComponent(command.id)}/result`,{method:'POST',body:JSON.stringify({agentId:this.agentId,result})});}catch(error:any){await this.request(`/api/agent/commands/${encodeURIComponent(command.id)}/result`,{method:'POST',body:JSON.stringify({agentId:this.agentId,error:error?.message||String(error)})});}}
-  private async request(path:string,init:RequestInit={}){const response=await fetch(`${this.apiUrl}${path}`,{...init,headers:{'Content-Type':'application/json','X-Agent-Token':this.token,...(init.headers||{})}});if(!response.ok)throw new Error(`${response.status} ${await response.text()}`);return response.json();}
+  private running = false;
+  private readonly apiUrl = (
+    process.env.CLOUD_API_URL ||
+    process.env.PUBLIC_API_URL ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    ''
+  ).replace(/\/$/, '');
+  private readonly token = process.env.LOCAL_AGENT_TOKEN || '';
+  private readonly agentId = process.env.LOCAL_AGENT_ID || `${os.hostname()}-${process.pid}`;
+  private readonly pollMs = Math.max(1000, Number(process.env.AGENT_POLL_MS || 2000));
+  private readonly adb = new AdbManager();
+
+  public async start() {
+    if (this.running || !this.apiUrl || !this.token) {
+      if (!this.apiUrl || !this.token) {
+        console.warn('[Cloud Bridge] Set CLOUD_API_URL and LOCAL_AGENT_TOKEN.');
+      }
+      return;
+    }
+
+    this.running = true;
+    console.log(`[Cloud Bridge] Agent ${this.agentId} -> ${this.apiUrl}`);
+
+    while (this.running) {
+      try {
+        const status = await this.adb.checkAdb();
+        const devices = await this.adb.getDevices();
+        await this.request('/api/agent/register', {
+          method: 'POST',
+          body: JSON.stringify({ agentId: this.agentId, hostname: os.hostname(), status, devices, heartbeatAt: new Date().toISOString() }),
+        });
+
+        const payload = await this.request(
+          `/api/agent/commands?agentId=${encodeURIComponent(this.agentId)}`
+        ) as { commands?: CloudCommand[] };
+
+        for (const command of payload?.commands || []) await this.handle(command);
+      } catch (error: any) {
+        console.warn(`[Cloud Bridge] ${error?.message || error}`);
+      }
+
+      await new Promise(resolve => setTimeout(resolve, this.pollMs));
+    }
+  }
+
+  private async handle(command: CloudCommand) {
+    try {
+      let result: any;
+      switch (command.type) {
+        case 'ADB_STATUS': {
+          const status = await this.adb.checkAdb();
+          result = { status, devices: await this.adb.getDevices(), refreshedAt: new Date().toISOString() };
+          break;
+        }
+        case 'ADB_REFRESH': {
+          const devices = await this.adb.getDevices();
+          result = { status: await this.adb.checkAdb(), devices, refreshedAt: new Date().toISOString() };
+          break;
+        }
+        case 'ADB_DEVICE_INFO':
+          if (!command.serial) throw new Error('Device serial is required');
+          result = { serial: command.serial, deviceInfo: await this.adb.getDeviceInfo(command.serial) };
+          break;
+        case 'ADB_DEVICE_PROPERTIES':
+          if (!command.serial) throw new Error('Device serial is required');
+          result = { serial: command.serial, properties: await this.adb.getDeviceProperties(command.serial) };
+          break;
+        case 'ADB_LIST_PACKAGES':
+          if (!command.serial) throw new Error('Device serial is required');
+          result = { serial: command.serial, packages: await this.adb.listPackages(command.serial) };
+          break;
+        case 'ADB_STORAGE_SUMMARY':
+          if (!command.serial) throw new Error('Device serial is required');
+          result = { serial: command.serial, storage: await this.adb.storageSummary(command.serial) };
+          break;
+        case 'ADB_PROCESSES':
+          if (!command.serial) throw new Error('Device serial is required');
+          result = { serial: command.serial, processes: await this.adb.listProcesses(command.serial) };
+          break;
+        default:
+          throw new Error(`Unsupported forensic command: ${command.type}`);
+      }
+
+      await this.request(`/api/agent/commands/${encodeURIComponent(command.id)}/result`, {
+        method: 'POST',
+        body: JSON.stringify({ agentId: this.agentId, result }),
+      });
+    } catch (error: any) {
+      await this.request(`/api/agent/commands/${encodeURIComponent(command.id)}/result`, {
+        method: 'POST',
+        body: JSON.stringify({ agentId: this.agentId, error: error?.message || String(error) }),
+      });
+    }
+  }
+
+  private async request(path: string, init: RequestInit = {}) {
+    const response = await fetch(`${this.apiUrl}${path}`, {
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Agent-Token': this.token,
+        ...(init.headers || {}),
+      },
+    });
+    if (!response.ok) throw new Error(`${response.status} ${await response.text()}`);
+    return response.json();
+  }
 }
