@@ -35,6 +35,7 @@ export class SecurityEngine {
       isDebuggable: boolean;
       grantedPermissions: string[];
       requestedPermissions: string[];
+      dangerousPermissions?: string[];
       sha256?: string;
     }
   ): AppRiskAnalysis {
@@ -56,7 +57,7 @@ export class SecurityEngine {
       toolCategory = toolMatch.category;
       flags.push(`SECURITY_TOOL:${toolMatch.category}`);
       reasons.push(`Potential security/testing utility detected (${toolMatch.category})`);
-      score += toolMatch.riskScore * 0.4; // Weighted moderately
+      score += toolMatch.riskScore * 0.4;
     }
 
     // Check threat intelligence signatures
@@ -69,21 +70,18 @@ export class SecurityEngine {
       }
     }
 
-    // Sideloaded detection
     if (app.isSideloaded && !app.isSystemApp) {
       score += 15;
       flags.push('SIDELOADED_APK');
       reasons.push('Application was sideloaded / installed outside the official app store');
     }
 
-    // Debuggable build
     if (app.isDebuggable) {
       score += 15;
       flags.push('DEBUGGABLE_FLAG_ENABLED');
       reasons.push('Application has android:debuggable="true" enabled');
     }
 
-    // Dangerous permissions evaluation
     let dangerousCount = 0;
     for (const perm of allPerms) {
       const permMeta = DANGEROUS_PERMISSIONS[perm];
@@ -117,7 +115,6 @@ export class SecurityEngine {
       reasons.push('Requests device administrator privileged controls');
     }
 
-    // Check suspicious combinations
     for (const combo of SUSPICIOUS_PERMISSION_COMBINATIONS) {
       const matches = combo.requiredPermissions.every(p => allPerms.includes(p));
       if (matches) {
@@ -127,12 +124,10 @@ export class SecurityEngine {
       }
     }
 
-    // System apps default reduction unless explicit threat match
     if (app.isSystemApp && !toolMatch) {
       score = Math.max(0, score * 0.3);
     }
 
-    // Clamp score
     const finalScore = Math.min(100, Math.max(0, Math.round(score)));
 
     let riskLevel: RiskLevel = 'SAFE';
@@ -185,13 +180,11 @@ export class SecurityEngine {
       }
     }
 
-    // Check for external link presence
     if (/(https?:\/\/[^\s]+)/gi.test(message.body)) {
       score += 15;
       reasons.push('Contains hyperlink in message text');
     }
 
-    // Check alphanumeric sender ID or short code
     if (/^[A-Za-z0-9]{3,8}$/.test(message.address) && score > 20) {
       score += 10;
       reasons.push('Sent from alphanumeric / short-code sender ID with urgent call to action');
@@ -207,9 +200,6 @@ export class SecurityEngine {
     };
   }
 
-  /**
-   * Inspects running process list and flags suspicious background processes.
-   */
   public analyzeProcess(process: {
     pid: number;
     user: string;
@@ -218,222 +208,73 @@ export class SecurityEngine {
     memoryKb: number;
   }): { isSuspicious: boolean; suspiciousReason?: string } {
     const lowerName = process.processName.toLowerCase();
-
-    // Check for suspicious root or terminal payloads
     if (lowerName.includes('meterpreter') || lowerName.includes('reverse_tcp') || lowerName.includes('frida-server')) {
-      return {
-        isSuspicious: true,
-        suspiciousReason: 'Process name matches known instrumentation or remote payload signature'
-      };
+      return { isSuspicious: true, suspiciousReason: 'Process name matches known instrumentation or remote payload signature' };
     }
-
     if (process.user === 'root' && (lowerName.includes('su') || lowerName.includes('magisk') || lowerName.includes('daemonsu'))) {
-      return {
-        isSuspicious: true,
-        suspiciousReason: 'Privileged root supervisor process active'
-      };
+      return { isSuspicious: true, suspiciousReason: 'Privileged root supervisor process active' };
     }
-
     if (process.cpuPercent > 80) {
-      return {
-        isSuspicious: true,
-        suspiciousReason: `Unusually high CPU consumption (${process.cpuPercent}%)`
-      };
+      return { isSuspicious: true, suspiciousReason: `Unusually high CPU consumption (${process.cpuPercent}%)` };
     }
-
     return { isSuspicious: false };
   }
 
-  /**
-   * Generates comprehensive device integrity indicators and overall security posture score.
-   */
   public evaluateDeviceIntegrity(device: Partial<DeviceInfo>): {
     securityScore: number;
     riskLevel: RiskLevel;
     indicators: SecurityIndicator[];
     scoreBreakdown: Array<{ factor: string; points: number; description: string }>;
   } {
-    let penaltyScore = 0; // Starts from 0 penalty, score = 100 - penaltyScore
+    let penaltyScore = 0;
     const indicators: SecurityIndicator[] = [];
     const scoreBreakdown: Array<{ factor: string; points: number; description: string }> = [];
-
-    // 1. Root detection
     if (device.rootDetected) {
       penaltyScore += 30;
-      scoreBreakdown.push({
-        factor: 'Root Privileges Detected',
-        points: -30,
-        description: `Device is rooted or su binaries were located (${(device.rootIndicators || []).join(', ')})`
-      });
-      indicators.push({
-        id: 'root-detected',
-        category: 'OS_INTEGRITY',
-        title: 'Root / Superuser Access',
-        status: 'DETECTED',
-        severity: 'CRITICAL',
-        scoreImpact: -30,
-        details: `Root binary presence verified: ${(device.rootIndicators || []).join(', ')}`,
-        recommendation: 'Verify if rooting was authorized for device testing; rooting bypasses Android sandbox security.'
-      });
+      scoreBreakdown.push({ factor: 'Root Privileges Detected', points: -30, description: `Device is rooted or su binaries were located (${(device.rootIndicators || []).join(', ')})` });
+      indicators.push({ id: 'root-detected', category: 'OS_INTEGRITY', title: 'Root / Superuser Access', status: 'DETECTED', severity: 'CRITICAL', scoreImpact: -30, details: `Root binary presence verified: ${(device.rootIndicators || []).join(', ')}`, recommendation: 'Verify if rooting was authorized for device testing; rooting bypasses Android sandbox security.' });
     } else {
-      indicators.push({
-        id: 'root-not-detected',
-        category: 'OS_INTEGRITY',
-        title: 'Root / Superuser Access',
-        status: 'NOT_DETECTED',
-        severity: 'LOW',
-        scoreImpact: 0,
-        details: 'No standard root binaries or Superuser managers detected in system paths.',
-        recommendation: 'Android application sandbox isolation remains intact.'
-      });
+      indicators.push({ id: 'root-not-detected', category: 'OS_INTEGRITY', title: 'Root / Superuser Access', status: 'NOT_DETECTED', severity: 'LOW', scoreImpact: 0, details: 'No standard root binaries or Superuser managers detected in system paths.', recommendation: 'Android application sandbox isolation remains intact.' });
     }
-
-    // 2. Verified Boot State
     const vBoot = (device.verifiedBootState || '').toLowerCase();
     if (vBoot === 'orange' || vBoot === 'red' || device.bootloaderUnlocked) {
       penaltyScore += 20;
-      scoreBreakdown.push({
-        factor: 'Bootloader Unlocked / Tampered',
-        points: -20,
-        description: `Verified boot state is '${vBoot || 'unlocked'}'`
-      });
-      indicators.push({
-        id: 'bootloader-unlocked',
-        category: 'OS_INTEGRITY',
-        title: 'Android Verified Boot',
-        status: 'DETECTED',
-        severity: 'HIGH',
-        scoreImpact: -20,
-        details: `Bootloader is unlocked. Verified boot state: ${vBoot || 'unlocked'}`,
-        recommendation: 'Lock the bootloader to ensure kernel and partition integrity verification at boot time.'
-      });
+      scoreBreakdown.push({ factor: 'Bootloader Unlocked / Tampered', points: -20, description: `Verified boot state is '${vBoot || 'unlocked'}'` });
+      indicators.push({ id: 'bootloader-unlocked', category: 'OS_INTEGRITY', title: 'Android Verified Boot', status: 'DETECTED', severity: 'HIGH', scoreImpact: -20, details: `Bootloader is unlocked. Verified boot state: ${vBoot || 'unlocked'}`, recommendation: 'Lock the bootloader to ensure kernel and partition integrity verification at boot time.' });
     } else {
-      indicators.push({
-        id: 'verified-boot-green',
-        category: 'OS_INTEGRITY',
-        title: 'Android Verified Boot',
-        status: 'NOT_DETECTED',
-        severity: 'LOW',
-        scoreImpact: 0,
-        details: `Verified boot is active (State: ${device.verifiedBootState || 'green'})`,
-        recommendation: 'Hardware cryptographic chain of trust is active.'
-      });
+      indicators.push({ id: 'verified-boot-green', category: 'OS_INTEGRITY', title: 'Android Verified Boot', status: 'NOT_DETECTED', severity: 'LOW', scoreImpact: 0, details: `Verified boot is active (State: ${device.verifiedBootState || 'green'})`, recommendation: 'Hardware cryptographic chain of trust is active.' });
     }
-
-    // 3. Security Patch Age
     const patchAgeDays = device.securityPatchAgeDays || 0;
     if (patchAgeDays > 365) {
       penaltyScore += 25;
-      scoreBreakdown.push({
-        factor: 'Critically Outdated Security Patch',
-        points: -25,
-        description: `Security patch is ${Math.round(patchAgeDays / 30)} months old (${device.securityPatchLevel})`
-      });
-      indicators.push({
-        id: 'patch-critically-outdated',
-        category: 'OS_INTEGRITY',
-        title: 'Security Patch Level',
-        status: 'DETECTED',
-        severity: 'HIGH',
-        scoreImpact: -25,
-        details: `Patch level: ${device.securityPatchLevel || 'Unknown'} (${patchAgeDays} days old)`,
-        recommendation: 'Update device firmware to the latest available vendor security bulletin patch.'
-      });
+      scoreBreakdown.push({ factor: 'Critically Outdated Security Patch', points: -25, description: `Security patch is ${Math.round(patchAgeDays / 30)} months old (${device.securityPatchLevel})` });
+      indicators.push({ id: 'patch-critically-outdated', category: 'OS_INTEGRITY', title: 'Security Patch Level', status: 'DETECTED', severity: 'HIGH', scoreImpact: -25, details: `Patch level: ${device.securityPatchLevel || 'Unknown'} (${patchAgeDays} days old)`, recommendation: 'Update device firmware to the latest available vendor security bulletin patch.' });
     } else if (patchAgeDays > 120) {
       penaltyScore += 10;
-      scoreBreakdown.push({
-        factor: 'Outdated Security Patch',
-        points: -10,
-        description: `Security patch is ${Math.round(patchAgeDays / 30)} months old (${device.securityPatchLevel})`
-      });
-      indicators.push({
-        id: 'patch-outdated',
-        category: 'OS_INTEGRITY',
-        title: 'Security Patch Level',
-        status: 'DETECTED',
-        severity: 'MODERATE',
-        scoreImpact: -10,
-        details: `Patch level: ${device.securityPatchLevel} (${patchAgeDays} days old)`,
-        recommendation: 'Check for available system updates.'
-      });
+      scoreBreakdown.push({ factor: 'Outdated Security Patch', points: -10, description: `Security patch is ${Math.round(patchAgeDays / 30)} months old (${device.securityPatchLevel})` });
+      indicators.push({ id: 'patch-outdated', category: 'OS_INTEGRITY', title: 'Security Patch Level', status: 'DETECTED', severity: 'MODERATE', scoreImpact: -10, details: `Patch level: ${device.securityPatchLevel} (${patchAgeDays} days old)`, recommendation: 'Check for available system updates.' });
     } else {
-      indicators.push({
-        id: 'patch-current',
-        category: 'OS_INTEGRITY',
-        title: 'Security Patch Level',
-        status: 'NOT_DETECTED',
-        severity: 'LOW',
-        scoreImpact: 0,
-        details: `Recent security patch level (${device.securityPatchLevel || 'Current'})`,
-        recommendation: 'Firmware is running up-to-date security patches.'
-      });
+      indicators.push({ id: 'patch-current', category: 'OS_INTEGRITY', title: 'Security Patch Level', status: 'NOT_DETECTED', severity: 'LOW', scoreImpact: 0, details: `Recent security patch level (${device.securityPatchLevel || 'Current'})`, recommendation: 'Firmware is running up-to-date security patches.' });
     }
-
-    // 4. Developer Options / USB Debugging
     if (device.developerOptionsEnabled || device.adbEnabled) {
       penaltyScore += 10;
-      scoreBreakdown.push({
-        factor: 'Developer Mode / ADB Active',
-        points: -10,
-        description: 'USB Debugging and Developer options are active on the device'
-      });
-      indicators.push({
-        id: 'dev-options-enabled',
-        category: 'DEBUG_ACCESS',
-        title: 'Developer Options & USB Debugging',
-        status: 'DETECTED',
-        severity: 'MODERATE',
-        scoreImpact: -10,
-        details: 'USB debugging is currently enabled to allow authorized forensic interaction.',
-        recommendation: 'Disable USB debugging when forensic acquisition is concluded.'
-      });
+      scoreBreakdown.push({ factor: 'Developer Mode / ADB Active', points: -10, description: 'USB Debugging and Developer options are active on the device' });
+      indicators.push({ id: 'dev-options-enabled', category: 'DEBUG_ACCESS', title: 'Developer Options & USB Debugging', status: 'DETECTED', severity: 'MODERATE', scoreImpact: -10, details: 'USB debugging is currently enabled to allow authorized forensic interaction.', recommendation: 'Disable USB debugging when forensic acquisition is concluded.' });
     }
-
-    // 5. Encryption State
     const encState = (device.encryptionState || '').toLowerCase();
     if (encState === 'unencrypted') {
       penaltyScore += 20;
-      scoreBreakdown.push({
-        factor: 'Storage Not Encrypted',
-        points: -20,
-        description: 'Device file-based or full-disk encryption is inactive'
-      });
-      indicators.push({
-        id: 'storage-unencrypted',
-        category: 'DEVICE_HARDWARE',
-        title: 'Filesystem Encryption',
-        status: 'DETECTED',
-        severity: 'HIGH',
-        scoreImpact: -20,
-        details: 'Device storage is unencrypted.',
-        recommendation: 'Enable File-Based Encryption (FBE) to safeguard data at rest.'
-      });
+      scoreBreakdown.push({ factor: 'Storage Not Encrypted', points: -20, description: 'Device file-based or full-disk encryption is inactive' });
+      indicators.push({ id: 'storage-unencrypted', category: 'DEVICE_HARDWARE', title: 'Filesystem Encryption', status: 'DETECTED', severity: 'HIGH', scoreImpact: -20, details: 'Device storage is unencrypted.', recommendation: 'Enable File-Based Encryption (FBE) to safeguard data at rest.' });
     } else {
-      indicators.push({
-        id: 'storage-encrypted',
-        category: 'DEVICE_HARDWARE',
-        title: 'Filesystem Encryption',
-        status: 'NOT_DETECTED',
-        severity: 'LOW',
-        scoreImpact: 0,
-        details: 'Device storage encryption (FBE/FDE) is active.',
-        recommendation: 'Data partition is hardware-backed encrypted.'
-      });
+      indicators.push({ id: 'storage-encrypted', category: 'DEVICE_HARDWARE', title: 'Filesystem Encryption', status: 'NOT_DETECTED', severity: 'LOW', scoreImpact: 0, details: 'Device storage encryption (FBE/FDE) is active.', recommendation: 'Data partition is hardware-backed encrypted.' });
     }
-
     const calculatedScore = Math.min(100, Math.max(0, 100 - penaltyScore));
-
     let riskLevel: RiskLevel = 'SAFE';
     if (calculatedScore < 40) riskLevel = 'CRITICAL';
     else if (calculatedScore < 60) riskLevel = 'HIGH_RISK';
-    else if (calculatedScore < 75) riskLevel = 'SUSPICIOUS';
+    else if (calculatedScore < 80) riskLevel = 'SUSPICIOUS';
     else if (calculatedScore < 90) riskLevel = 'INFORMATIONAL';
-
-    return {
-      securityScore: calculatedScore,
-      riskLevel,
-      indicators,
-      scoreBreakdown
-    };
+    return { securityScore: calculatedScore, riskLevel, indicators, scoreBreakdown };
   }
 }
