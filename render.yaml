@@ -3,9 +3,10 @@ services:
     name: smart-forensic-api
     env: node
     plan: free
+    region: singapore
     healthCheckPath: /api/health
-    buildCommand: npm install --include=dev && npm run build --workspace=@smart-forensic/shared && npm run build --workspace=@smart-forensic/security-engine && npm run prisma:generate --workspace=@smart-forensic/api && npm run build --workspace=@smart-forensic/api
-    startCommand: node apps/api/dist/server.js
+    buildCommand: npm install --include=dev && npm run build:shared && npm run build:security && npm run prisma:generate --workspace=@smart-forensic/api && npm run build:api
+    startCommand: npm run start --workspace=@smart-forensic/api
     envVars:
       - key: NODE_ENV
         value: production
@@ -21,12 +22,17 @@ services:
         generateValue: true
       - key: LOCAL_AGENT_TOKEN
         generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: smart-forensic-db
+          property: connectionString
 
   - type: web
     name: smart-forensic-dashboard
     env: node
     plan: free
-    buildCommand: npm install --include=dev && npm run build --workspace=@smart-forensic/shared && npm run build --workspace=@smart-forensic/web
+    region: singapore
+    buildCommand: npm install --include=dev && npm run build:shared && npm run build --workspace=@smart-forensic/web
     startCommand: npm run start --workspace=@smart-forensic/web
     envVars:
       - key: NODE_ENV
