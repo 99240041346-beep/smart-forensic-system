@@ -4,7 +4,7 @@ services:
     name: smart-forensic-api
     env: node
     plan: starter
-    buildCommand: npm install --include=dev && npm run build --workspace=@smart-forensic/shared && npm run build --workspace=@smart-forensic/security-engine && npm run prisma:generate && npm run build --workspace=@smart-forensic/api
+    buildCommand: npm install --include=dev && npm run build --workspace=@smart-forensic/shared && npm run build --workspace=@smart-forensic/security-engine && npm run prisma:generate --workspace=@smart-forensic/api && npm run build --workspace=@smart-forensic/api
     startCommand: node apps/api/dist/server.js
     envVars:
       - key: NODE_ENV
