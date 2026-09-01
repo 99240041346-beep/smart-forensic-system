@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, createContext, useContext } from 'react';
+import { usePathname } from 'next/navigation';
 import { Navbar } from '../components/Navbar';
 import { Sidebar } from '../components/Sidebar';
 import { AdbDevice } from '@smart-forensic/shared';
@@ -22,8 +23,11 @@ export const DeviceContext = createContext<DeviceContextType>({
 export const useDevice = () => useContext(DeviceContext);
 
 export const ClientLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const pathname = usePathname();
   const [selectedDevice, setSelectedDevice] = useState<AdbDevice | null>(null);
   const [activeCaseId, setActiveCaseId] = useState<string | null>(null);
+
+  if (pathname === '/login' || pathname === '/logout') return <>{children}</>;
 
   return (
     <DeviceContext.Provider value={{ selectedDevice, setSelectedDevice, activeCaseId, setActiveCaseId }}>
